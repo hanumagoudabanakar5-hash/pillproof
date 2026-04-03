@@ -1,133 +1,185 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { fetchBatches, verifyBatch } from '@/lib/api';
-
-interface Batch {
-  id: number;
-  batchId: string;
-  medicineName: string;
-  manufacturer: string;
-  quantity: number;
-  expiryDate: string;
-  status: string;
-  contractId: number;
-}
+import Link from 'next/link';
 
 export default function VerifyPage() {
-  const [batches, setBatches] = useState<Batch[]>([]);
+  const [batches, setBatches] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [verifying, setVerifying] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState('');
+  const [verifying, setVerifying] = useState({});
+  const [verifiedBatches, setVerifiedBatches] = useState(new Set());
 
   useEffect(() => {
-    loadBatches();
-    const interval = setInterval(loadBatches, 3000);
-    return () => clearInterval(interval);
+    fetchBatches();
   }, []);
 
-  const loadBatches = async () => {
+  const fetchBatches = async () => {
     try {
-      setError(null);
-      const data = await fetchBatches();
-      if (data.success) {
+      setLoading(true);
+      const response = await fetch('/api/py/batches');
+      const data = await response.json();
+
+      if (data.success && data.batches) {
         setBatches(data.batches);
+      } else {
+        setError('Failed to fetch batches');
       }
-    } catch (err: any) {
-      setError(`Error: ${err.message}`);
+    } catch (err) {
       console.error('Fetch error:', err);
+      setError(`Error: ${err.message}`);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleVerify = async (batchId: string) => {
-    setVerifying(batchId);
+  const handleVerify = async (batchId) => {
     try {
-      const data = await verifyBatch(batchId);
+      setVerifying(prev => ({ ...prev, [batchId]: true }));
+
+      const response = await fetch(`/api/py/batches/verify/${batchId}`, {
+        method: 'GET'
+      });
+
+      const data = await response.json();
+
       if (data.success) {
-        alert('✅ Batch Verified!');
-        loadBatches();
+        setVerifiedBatches(prev => new Set([...prev, batchId]));
+        // Refresh batches
+        fetchBatches();
       } else {
-        alert('❌ Verification Failed');
+        setError(data.message || 'Failed to verify batch');
       }
-    } catch (err: any) {
-      alert('❌ Error: ' + err.message);
+    } catch (err) {
+      console.error('Verify error:', err);
+      setError(`Error: ${err.message}`);
     } finally {
-      setVerifying(null);
+      setVerifying(prev => ({ ...prev, [batchId]: false }));
     }
   };
 
   return (
-    <div style={{ padding: '40px' }}>
-      <h1>✅ Verify Medicine Batches</h1>
-      
-      {error && (
-        <div style={{
-          backgroundColor: '#f8d7da',
-          color: '#721c24',
-          padding: '15px',
-          borderRadius: '5px',
-          marginBottom: '20px',
-        }}>
-          {error}
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-12 px-4">
+      <div className="max-w-6xl mx-auto">
+        <div className="bg-white rounded-lg shadow-lg p-8">
+          <Link href="/" className="text-blue-600 hover:text-blue-800 mb-6 inline-block">
+            ← Back to Home
+          </Link>
+
+          <h1 className="text-4xl font-bold mb-2 text-gray-800">✅ Verify Batches</h1>
+          <p className="text-gray-600 mb-8">Verify medicine batches on the blockchain</p>
+
+          {/* Error Message */}
+          {error && (
+            <div className="mb-8 bg-red-50 border-2 border-red-500 rounded-lg p-6">
+              <p className="text-red-700 font-semibold">❌ {error}</p>
+            </div>
+          )}
+
+          {/* Loading */}
+          {loading && (
+            <div className="text-center py-12">
+              <p className="text-xl text-gray-600">⏳ Loading batches...</p>
+            </div>
+          )}
+
+          {/* No Batches */}
+          {!loading && batches.length === 0 && (
+            <div className="bg-yellow-50 border-2 border-yellow-400 rounded-lg p-6 text-center">
+              <p className="text-yellow-700 text-lg font-semibold">📭 No batches registered yet</p>
+              <p className="text-yellow-600 mt-2">
+                <Link href="/register" className="text-blue-600 hover:text-blue-800 font-semibold">
+                  Register a batch first
+                </Link>
+              </p>
+            </div>
+          )}
+
+          {/* Batches List */}
+          {!loading && batches.length > 0 && (
+            <div className="space-y-4">
+              {batches.map((batch) => (
+                <div
+                  key={batch.batchId}
+                  className={`border-2 rounded-lg p-6 ${
+                    batch.status === 'Verified'
+                      ? 'bg-green-50 border-green-400'
+                      : 'bg-yellow-50 border-yellow-400'
+                  }`}
+                >
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div>
+                      <p className="text-gray-600 font-semibold">Batch ID:</p>
+                      <p className="text-lg font-mono text-blue-700">{batch.batchId}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-600 font-semibold">Medicine:</p>
+                      <p className="text-lg text-gray-800">{batch.medicineName}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-600 font-semibold">Manufacturer:</p>
+                      <p className="text-lg text-gray-800">{batch.manufacturer}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-600 font-semibold">Quantity:</p>
+                      <p className="text-lg text-gray-800">{batch.quantity}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-600 font-semibold">Expiry Date:</p>
+                      <p className="text-lg text-gray-800">{batch.expiryDate}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-600 font-semibold">Status:</p>
+                      <span
+                        className={`inline-block px-4 py-1 rounded-full font-semibold ${
+                          batch.status === 'Verified'
+                            ? 'bg-green-500 text-white'
+                            : 'bg-yellow-500 text-white'
+                        }`}
+                      >
+                        {batch.status}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="mb-4">
+                    <p className="text-gray-600 font-semibold">Blockchain Hash:</p>
+                    <p className="text-sm font-mono text-gray-700 break-all bg-gray-100 p-2 rounded">
+                      {batch.blockchainHash}
+                    </p>
+                  </div>
+
+                  {batch.status !== 'Verified' && (
+                    <button
+                      onClick={() => handleVerify(batch.batchId)}
+                      disabled={verifying[batch.batchId]}
+                      className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white font-bold py-2 rounded-lg transition"
+                    >
+                      {verifying[batch.batchId] ? '⏳ Verifying...' : '✅ Verify Batch'}
+                    </button>
+                  )}
+
+                  {batch.status === 'Verified' && (
+                    <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded text-center font-semibold">
+                      ✅ This batch is verified on the blockchain
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Refresh Button */}
+          <div className="mt-8 text-center">
+            <button
+              onClick={fetchBatches}
+              className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg"
+            >
+              🔄 Refresh
+            </button>
+          </div>
         </div>
-      )}
-      
-      {loading ? (
-        <p>⏳ Loading batches...</p>
-      ) : batches.length === 0 ? (
-        <p>📭 No batches found. Register a batch first!</p>
-      ) : (
-        <table style={{
-          width: '100%',
-          borderCollapse: 'collapse',
-          boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-        }}>
-          <thead>
-            <tr style={{ backgroundColor: '#282c34', color: 'white' }}>
-              <th style={{ border: '1px solid #ddd', padding: '15px' }}>Batch ID</th>
-              <th style={{ border: '1px solid #ddd', padding: '15px' }}>Medicine</th>
-              <th style={{ border: '1px solid #ddd', padding: '15px' }}>Status</th>
-              <th style={{ border: '1px solid #ddd', padding: '15px' }}>Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {batches.map((batch, idx) => (
-              <tr key={batch.id} style={{ backgroundColor: idx % 2 === 0 ? '#f9f9f9' : 'white' }}>
-                <td style={{ border: '1px solid #ddd', padding: '15px' }}>{batch.batchId}</td>
-                <td style={{ border: '1px solid #ddd', padding: '15px' }}>{batch.medicineName}</td>
-                <td style={{ border: '1px solid #ddd', padding: '15px' }}>
-                  <span style={{
-                    padding: '6px 12px',
-                    backgroundColor: batch.status === 'Verified' ? '#28a745' : '#ffc107',
-                    color: 'white',
-                    borderRadius: '20px',
-                  }}>
-                    {batch.status}
-                  </span>
-                </td>
-                <td style={{ border: '1px solid #ddd', padding: '15px' }}>
-                  <button
-                    onClick={() => handleVerify(batch.batchId)}
-                    disabled={batch.status === 'Verified' || verifying === batch.batchId}
-                    style={{
-                      padding: '8px 15px',
-                      backgroundColor: batch.status === 'Verified' ? '#ccc' : '#007bff',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '4px',
-                      cursor: batch.status === 'Verified' ? 'not-allowed' : 'pointer',
-                    }}
-                  >
-                    {verifying === batch.batchId ? '⏳ Verifying...' : 'Verify'}
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+      </div>
     </div>
   );
 }
