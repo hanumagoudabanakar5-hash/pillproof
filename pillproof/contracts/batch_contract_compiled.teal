@@ -1,0 +1,44 @@
+#pragma version 10
+txn ApplicationID
+int 0
+==
+bnz main_l4
+txn OnCompletion
+int NoOp
+==
+bnz main_l3
+err
+main_l3:
+byte "is_verified"
+byte "yes"
+app_global_put
+byte "verification_timestamp"
+txna ApplicationArgs 0
+app_global_put
+int 1
+return
+main_l4:
+txn NumAppArgs
+int 5
+==
+assert
+byte "batch_id"
+txna ApplicationArgs 0
+app_global_put
+byte "medicine_name"
+txna ApplicationArgs 1
+app_global_put
+byte "manufacturer"
+txna ApplicationArgs 2
+app_global_put
+byte "quantity"
+txna ApplicationArgs 3
+app_global_put
+byte "expiry_date"
+txna ApplicationArgs 4
+app_global_put
+byte "is_verified"
+byte "no"
+app_global_put
+int 1
+return
