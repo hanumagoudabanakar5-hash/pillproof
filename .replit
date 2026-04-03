@@ -1,0 +1,8 @@
+run = "echo 'Starting PillProof...' && cd pillproof/backend && npm start"
+modules = ["nodejs-18:v8-20230920"]
+
+[nix]
+channel = "stable-23.05"
+
+[deployment]
+run = ["sh", "-c", "cd pillproof/backend && npm start"]

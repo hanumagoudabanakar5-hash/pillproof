@@ -1,162 +1,68 @@
 'use client';
 
 import { useState } from 'react';
-
-interface QRResult {
-  batchId: string;
-  medicine: string;
-  manufacturer: string;
-  expiry: string;
-  contractId: number;
-}
+import Link from 'next/link';
 
 export default function QRScannerPage() {
   const [batchId, setBatchId] = useState('');
+  const [qrCode, setQrCode] = useState('');
   const [loading, setLoading] = useState(false);
-  const [qrCode, setQrCode] = useState<string | null>(null);
-  const [qrData, setQrData] = useState<QRResult | null>(null);
+  const [error, setError] = useState('');
 
-  const handleGenerateQR = async (e: React.FormEvent) => {
+  const handleGenerate = async (e) => {
     e.preventDefault();
     setLoading(true);
+    setError('');
+    setQrCode('');
 
     try {
-      const batchResponse = await fetch(`http://localhost:5000/api/batches/${batchId}`);
-      const batchDataResult = await batchResponse.json();
-
-      if (!batchDataResult.success) {
-        alert('Batch not found');
-        setLoading(false);
+      if (!batchId) {
+        setError('Please enter a batch ID');
         return;
       }
 
-      const batch = batchDataResult.batch;
-
-      const response = await fetch('http://localhost:5000/api/counterfeit/qrcode', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          batchId: batch.batchId,
-          medicineName: batch.medicineName,
-          manufacturer: batch.manufacturer,
-          expiryDate: batch.expiryDate,
-          contractId: batch.contractId,
-        }),
-      });
-
-      const data = await response.json();
-      setQrCode(data.qr.qrCode);
-      setQrData(data.qr.qrData);
-    } catch (error: any) {
-      alert('Error: ' + error.message);
+      // Generate QR code using qr-server API
+      const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(batchId)}`;
+      setQrCode(qrUrl);
+    } catch (err) {
+      setError(`Error: ${err.message}`);
     } finally {
       setLoading(false);
     }
   };
 
-  const downloadQR = () => {
-    if (!qrCode) return;
-    const link = document.createElement('a');
-    link.href = qrCode;
-    link.download = `qr-${batchId}.png`;
-    link.click();
-  };
-
   return (
-    <div style={{ padding: '40px', maxWidth: '800px', margin: '0 auto' }}>
-      <h1>QR Code Scanner & Generator</h1>
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-12 px-4">
+      <div className="max-w-2xl mx-auto">
+        <Link href="/" className="text-blue-600 hover:text-blue-800 mb-6 inline-block">← Home</Link>
 
-      <form onSubmit={handleGenerateQR} style={{
-        backgroundColor: '#f9f9f9',
-        padding: '20px',
-        borderRadius: '8px',
-        boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-        marginBottom: '30px',
-      }}>
-        <div style={{ display: 'flex', gap: '10px' }}>
-          <input
-            type="text"
-            placeholder="Batch ID"
-            value={batchId}
-            onChange={(e) => setBatchId(e.target.value)}
-            required
-            style={{
-              flex: 1,
-              padding: '10px',
-              borderRadius: '4px',
-              border: '1px solid #ddd',
-            }}
-          />
-          <button
-            type="submit"
-            disabled={loading}
-            style={{
-              padding: '10px 20px',
-              backgroundColor: loading ? '#ccc' : '#007bff',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: loading ? 'not-allowed' : 'pointer',
-            }}
-          >
-            {loading ? 'Generating...' : 'Generate QR'}
-          </button>
-        </div>
-      </form>
+        <div className="bg-white rounded-lg shadow-lg p-8">
+          <h1 className="text-4xl font-bold mb-2">📱 QR Scanner</h1>
+          <p className="text-gray-600 mb-8">Generate and scan batch QR codes</p>
 
-      {qrCode && (
-        <div style={{
-          backgroundColor: 'white',
-          padding: '30px',
-          borderRadius: '8px',
-          textAlign: 'center',
-        }}>
-          <h2>QR Code Generated</h2>
-          
-          <img
-            src={qrCode}
-            alt="QR Code"
-            style={{
-              width: '300px',
-              height: '300px',
-              margin: '20px 0',
-              border: '2px solid #ddd',
-              padding: '10px',
-            }}
-          />
+          {error && <div className="mb-8 bg-red-50 border-2 border-red-500 rounded-lg p-6"><p className="text-red-700">❌ {error}</p></div>}
 
-          <button
-            onClick={downloadQR}
-            style={{
-              padding: '12px 20px',
-              backgroundColor: '#28a745',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer',
-            }}
-          >
-            Download QR Code
-          </button>
+          <form onSubmit={handleGenerate} className="mb-8 space-y-4">
+            <div>
+              <label className="block text-gray-700 font-semibold mb-2">Batch ID</label>
+              <input type="text" value={batchId} onChange={(e) => setBatchId(e.target.value)} placeholder="e.g., REG-2024-001" className="w-full px-4 py-2 border-2 border-gray-300 rounded" />
+            </div>
+            <button type="submit" disabled={loading} className="w-full bg-purple-600 hover:bg-purple-700 disabled:bg-gray-400 text-white font-bold py-3 rounded text-lg">
+              {loading ? '⏳ Generating...' : '📱 Generate QR Code'}
+            </button>
+          </form>
 
-          {qrData && (
-            <div style={{
-              marginTop: '30px',
-              backgroundColor: '#f9f9f9',
-              padding: '20px',
-              borderRadius: '8px',
-              textAlign: 'left',
-            }}>
-              <h3>Batch Information</h3>
-              <p><strong>Batch ID:</strong> {qrData.batchId}</p>
-              <p><strong>Medicine:</strong> {qrData.medicine}</p>
-              <p><strong>Manufacturer:</strong> {qrData.manufacturer}</p>
-              <p><strong>Expiry:</strong> {qrData.expiry}</p>
-              <p><strong>Contract:</strong> {qrData.contractId}</p>
+          {qrCode && (
+            <div className="text-center bg-gray-50 p-8 rounded-lg border-2 border-gray-300">
+              <p className="text-gray-700 font-semibold mb-4">Batch ID: {batchId}</p>
+              <img src={qrCode} alt="QR Code" className="mx-auto mb-4" />
+              <a href={qrCode} download="qr-code.png" className="inline-block bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded">
+                ⬇️ Download QR Code
+              </a>
             </div>
           )}
         </div>
-      )}
+      </div>
     </div>
   );
 }

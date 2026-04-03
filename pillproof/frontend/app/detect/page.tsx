@@ -1,210 +1,101 @@
 'use client';
 
 import { useState } from 'react';
-
-interface AnalysisResult {
-  isAuthentic: boolean;
-  status: string;
-  riskScore: number;
-  confidence: number;
-  riskFactors: string[];
-}
+import Link from 'next/link';
 
 export default function DetectPage() {
-  const [batchId, setBatchId] = useState('');
   const [formData, setFormData] = useState({
     medicineName: '',
     manufacturer: '',
     quantity: '',
-    expiryDate: '',
-    contractId: '',
+    expiryDate: ''
   });
+  const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<AnalysisResult | null>(null);
+  const [error, setError] = useState('');
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    });
+  const handleChange = (e) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  const handleAnalyze = async (e: React.FormEvent) => {
+  const handleAnalyze = async (e) => {
     e.preventDefault();
     setLoading(true);
+    setError('');
+    setResult(null);
 
     try {
-      const response = await fetch(
-        `http://localhost:5000/api/counterfeit/analyze/${batchId}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            ...formData,
-            quantity: parseInt(formData.quantity),
-            contractId: parseInt(formData.contractId),
-          }),
-        }
-      );
+      const res = await fetch('http://localhost:8000/api/batches/detect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          medicineName: formData.medicineName,
+          manufacturer: formData.manufacturer,
+          quantity: parseInt(formData.quantity),
+          expiryDate: formData.expiryDate
+        })
+      });
 
-      const data = await response.json();
-      setResult(data.analysis);
-    } catch (error: any) {
-      alert('Error: ' + error.message);
+      const data = await res.json();
+      if (data.success) {
+        setResult(data);
+      } else {
+        setError('Analysis failed');
+      }
+    } catch (err) {
+      setError(`Error: ${err.message}`);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div style={{ padding: '40px', maxWidth: '800px', margin: '0 auto' }}>
-      <h1>Counterfeit Detection</h1>
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-12 px-4">
+      <div className="max-w-2xl mx-auto">
+        <Link href="/" className="text-blue-600 hover:text-blue-800 mb-6 inline-block">← Home</Link>
 
-      <form onSubmit={handleAnalyze} style={{
-        backgroundColor: '#f9f9f9',
-        padding: '20px',
-        borderRadius: '8px',
-        boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-        marginBottom: '30px',
-      }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
-          <input
-            type="text"
-            placeholder="Batch ID"
-            value={batchId}
-            onChange={(e) => setBatchId(e.target.value)}
-            required
-            style={{ padding: '10px', borderRadius: '4px', border: '1px solid #ddd' }}
-          />
+        <div className="bg-white rounded-lg shadow-lg p-8">
+          <h1 className="text-4xl font-bold mb-2">🔍 Detect Counterfeit</h1>
+          <p className="text-gray-600 mb-8">Analyze batch for authenticity</p>
 
-          <input
-            type="text"
-            name="medicineName"
-            placeholder="Medicine Name"
-            value={formData.medicineName}
-            onChange={handleChange}
-            required
-            style={{ padding: '10px', borderRadius: '4px', border: '1px solid #ddd' }}
-          />
+          {error && <div className="mb-8 bg-red-50 border-2 border-red-500 rounded-lg p-6"><p className="text-red-700">❌ {error}</p></div>}
 
-          <input
-            type="text"
-            name="manufacturer"
-            placeholder="Manufacturer"
-            value={formData.manufacturer}
-            onChange={handleChange}
-            required
-            style={{ padding: '10px', borderRadius: '4px', border: '1px solid #ddd' }}
-          />
-
-          <input
-            type="number"
-            name="quantity"
-            placeholder="Quantity"
-            value={formData.quantity}
-            onChange={handleChange}
-            required
-            style={{ padding: '10px', borderRadius: '4px', border: '1px solid #ddd' }}
-          />
-
-          <input
-            type="date"
-            name="expiryDate"
-            value={formData.expiryDate}
-            onChange={handleChange}
-            required
-            style={{ padding: '10px', borderRadius: '4px', border: '1px solid #ddd' }}
-          />
-
-          <input
-            type="number"
-            name="contractId"
-            placeholder="Contract ID"
-            value={formData.contractId}
-            onChange={handleChange}
-            required
-            style={{ padding: '10px', borderRadius: '4px', border: '1px solid #ddd' }}
-          />
-        </div>
-
-        <button
-          type="submit"
-          disabled={loading}
-          style={{
-            width: '100%',
-            padding: '12px',
-            marginTop: '15px',
-            backgroundColor: loading ? '#ccc' : '#007bff',
-            color: 'white',
-            border: 'none',
-            borderRadius: '5px',
-            cursor: loading ? 'not-allowed' : 'pointer',
-            fontSize: '16px',
-            fontWeight: 'bold',
-          }}
-        >
-          {loading ? 'Analyzing...' : 'Analyze Batch'}
-        </button>
-      </form>
-
-      {result && (
-        <div style={{
-          padding: '20px',
-          borderRadius: '8px',
-          backgroundColor: result.isAuthentic ? '#d4edda' : '#f8d7da',
-          border: `3px solid ${result.isAuthentic ? '#28a745' : '#dc3545'}`,
-        }}>
-          <h2 style={{ color: result.isAuthentic ? '#155724' : '#721c24' }}>
-            {result.isAuthentic ? 'AUTHENTIC' : 'SUSPICIOUS'}
-          </h2>
-
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: '1fr 1fr',
-            gap: '20px',
-            marginTop: '15px',
-          }}>
-            <div>
-              <h3>Status</h3>
-              <p style={{ fontSize: '18px', fontWeight: 'bold' }}>{result.status}</p>
-            </div>
-
-            <div>
-              <h3>Confidence: {result.confidence}%</h3>
-              <div style={{
-                backgroundColor: 'white',
-                borderRadius: '8px',
-                overflow: 'hidden',
-                height: '30px',
-              }}>
-                <div style={{
-                  width: `${result.confidence}%`,
-                  backgroundColor: result.isAuthentic ? '#28a745' : '#dc3545',
-                  height: '100%',
-                }}>
-                </div>
+          {result && (
+            <div className={`mb-8 border-2 rounded-lg p-6 ${result.isAuthentic ? 'bg-green-50 border-green-500' : 'bg-red-50 border-red-500'}`}>
+              <h2 className={`text-2xl font-bold mb-4 ${result.isAuthentic ? 'text-green-700' : 'text-red-700'}`}>
+                {result.isAuthentic ? '✅ AUTHENTIC' : '❌ COUNTERFEIT'}
+              </h2>
+              <div className="space-y-2">
+                <p><strong>Confidence:</strong> {result.confidence}%</p>
+                <p><strong>Risk Score:</strong> {result.riskScore}</p>
+                <p><strong>Risk Factors:</strong> {result.riskFactors.length > 0 ? result.riskFactors.join(', ') : 'None'}</p>
               </div>
             </div>
+          )}
 
+          <form onSubmit={handleAnalyze} className="space-y-6">
             <div>
-              <h3>Risk Score: {result.riskScore}/100</h3>
+              <label className="block text-gray-700 font-semibold mb-2">Medicine Name</label>
+              <input type="text" name="medicineName" value={formData.medicineName} onChange={handleChange} placeholder="e.g., Aspirin" required className="w-full px-4 py-2 border-2 border-gray-300 rounded" />
             </div>
-
             <div>
-              <h3>Risk Factors</h3>
-              {result.riskFactors.length === 0 ? (
-                <p>No risk factors detected</p>
-              ) : (
-                <ul>
-                  {result.riskFactors.map((factor, idx) => (
-                    <li key={idx}>{factor}</li>
-                  ))}
-                </ul>
-              )}
+              <label className="block text-gray-700 font-semibold mb-2">Manufacturer</label>
+              <input type="text" name="manufacturer" value={formData.manufacturer} onChange={handleChange} placeholder="e.g., Bayer" required className="w-full px-4 py-2 border-2 border-gray-300 rounded" />
             </div>
-          </div>
+            <div>
+              <label className="block text-gray-700 font-semibold mb-2">Quantity</label>
+              <input type="number" name="quantity" value={formData.quantity} onChange={handleChange} placeholder="e.g., 10000" required className="w-full px-4 py-2 border-2 border-gray-300 rounded" />
+            </div>
+            <div>
+              <label className="block text-gray-700 font-semibold mb-2">Expiry Date</label>
+              <input type="date" name="expiryDate" value={formData.expiryDate} onChange={handleChange} required className="w-full px-4 py-2 border-2 border-gray-300 rounded" />
+            </div>
+            <button type="submit" disabled={loading} className="w-full bg-orange-600 hover:bg-orange-700 disabled:bg-gray-400 text-white font-bold py-3 rounded text-lg">
+              {loading ? '⏳ Analyzing...' : '🔍 Analyze'}
+            </button>
+          </form>
         </div>
-      )}
+      </div>
     </div>
   );
 }
