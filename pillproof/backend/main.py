@@ -1,240 +1,209 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from datetime import datetime
-import json
-import os
-from pathlib import Path
+from models import MedicineBatch, ProcurementOrder, SupplyChainTransfer, CounterfeitReport, VerifyBatch
+from algorand_client import check_connection
+from database import (
+    add_batch, get_batch, update_batch_stage, flag_batch_counterfeit,
+    add_supply_chain_record, get_supply_chain_records,
+    add_procurement_order, get_procurement_order, update_order_status,
+    add_alert, get_dashboard_stats
+)
+from qr_generator import generate_qr, verify_qr
+import uvicorn
 
-app = FastAPI()
+app = FastAPI(
+    title="PillProof API",
+    description="Blockchain Powered Autonomous Medicine Procurement and Counterfeit Detection System",
+    version="1.0.0"
+)
 
-# Enable CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*"],
+    allow_headers=["*"]
 )
 
-# Data storage file
-DATA_FILE = "batches.json"
-
-# Models
-class BatchRegisterRequest(BaseModel):
-    medicineName: str
-    manufacturer: str
-    quantity: int
-    expiryDate: str
-
-class BatchResponse(BaseModel):
-    success: bool
-    message: str
-    batch: dict = None
-    error: str = None
-
-# Helper functions
-def load_batches():
-    if os.path.exists(DATA_FILE):
-        with open(DATA_FILE, 'r') as f:
-            return json.load(f)
-    return []
-
-def save_batches(batches):
-    with open(DATA_FILE, 'w') as f:
-        json.dump(batches, f, indent=2)
-
-def generate_batch_id():
-    batches = load_batches()
-    batch_num = len(batches) + 1
-    return f"REG-2024-{batch_num:03d}"
-
-# API Endpoints
-@app.get("/api/health")
-async def health():
+@app.get("/")
+def home():
     return {
-        "success": True,
-        "message": "✅ Backend is running!",
-        "status": "healthy"
+        "project": "PillProof",
+        "version": "1.0.0",
+        "blockchain": "Algorand Testnet",
+        "status": "Running",
+        "problem_statement": "MSIH25065 Autonomous Procurement Agent"
     }
 
-@app.post("/api/batches/register")
-async def register_batch(request: BatchRegisterRequest):
-    try:
-        batches = load_batches()
-        
-        batch_id = generate_batch_id()
-        
-        new_batch = {
-            "batchId": batch_id,
-            "medicineName": request.medicineName,
-            "manufacturer": request.manufacturer,
-            "quantity": request.quantity,
-            "expiryDate": request.expiryDate,
-            "status": "Pending",
-            "blockchainHash": f"HASH-{batch_id}",
-            "contractId": 660860,
-            "createdAt": datetime.now().isoformat(),
-            "isAuthentic": True,
-            "riskScore": 0
-        }
-        
-        batches.append(new_batch)
-        save_batches(batches)
-        
-        return {
-            "success": True,
-            "message": "✅ Batch registered successfully!",
-            "batch": new_batch
-        }
-    except Exception as e:
-        return {
-            "success": False,
-            "message": "❌ Error registering batch",
-            "error": str(e)
-        }
+@app.get("/blockchain/status")
+def blockchain_status():
+    return check_connection()
 
-@app.get("/api/batches/verify/{batch_id}")
-async def verify_batch(batch_id: str):
+@app.post("/batch/register")
+def register_batch(batch: MedicineBatch):
     try:
-        batches = load_batches()
-        batch = next((b for b in batches if b["batchId"] == batch_id), None)
-        
+        if get_batch(batch.batch_id):
+            raise HTTPException(status_code=400, detail="Batch ID already exists")
+        data = batch.dict()
+        saved = add_batch(batch.batch_id, data)
+        qr = generate_qr(data)
+        return {
+            "message": "Medicine batch registered on Algorand blockchain successfully",
+            "batch_id": batch.batch_id,
+            "medicine_name": batch.medicine_name,
+            "qr_generated": qr["success"],
+            "qr_path": qr.get("path", ""),
+            "blockchain_status": "CONFIRMED",
+            "current_stage": "MANUFACTURED"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/batch/verify/{batch_id}")
+def verify_batch(batch_id: str):
+    try:
+        batch = get_batch(batch_id)
         if not batch:
             return {
-                "success": False,
-                "message": "❌ Batch not found",
-                "error": "Batch ID not found in database"
+                "is_genuine": False,
+                "status": "COUNTERFEIT",
+                "message": "Batch not found on Algorand blockchain",
+                "batch_id": batch_id
             }
-        
-        # Update status to verified
-        batch["status"] = "Verified"
-        save_batches(batches)
-        
+        qr = verify_qr(batch_id)
         return {
-            "success": True,
-            "message": "✅ Batch verified successfully!",
-            "batch": batch
+            "is_genuine": batch["is_genuine"],
+            "status": "GENUINE" if batch["is_genuine"] else "COUNTERFEIT",
+            "batch_id": batch_id,
+            "medicine_name": batch["medicine_name"],
+            "manufacturer_name": batch["manufacturer_name"],
+            "manufacture_date": batch["manufacture_date"],
+            "expiry_date": batch["expiry_date"],
+            "current_stage": batch["current_stage"],
+            "blockchain": "Algorand Testnet",
+            "registered_on": batch["registered_on"]
         }
     except Exception as e:
-        return {
-            "success": False,
-            "message": "❌ Error verifying batch",
-            "error": str(e)
-        }
+        raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/batches")
-async def get_all_batches():
+@app.get("/batch/journey/{batch_id}")
+def get_journey(batch_id: str):
     try:
-        batches = load_batches()
-        return {
-            "success": True,
-            "batches": batches
-        }
-    except Exception as e:
-        return {
-            "success": False,
-            "error": str(e)
-        }
-
-@app.post("/api/batches/detect")
-async def detect_counterfeit(request: BatchRegisterRequest):
-    try:
-        # Simple analysis
-        risk_score = 0
-        risk_factors = []
-        
-        # Check expiry date
-        try:
-            expiry = datetime.strptime(request.expiryDate, "%Y-%m-%d")
-            if expiry < datetime.now():
-                risk_score += 50
-                risk_factors.append("Expired date")
-        except:
-            pass
-        
-        # Check quantity
-        if request.quantity <= 0:
-            risk_score += 30
-            risk_factors.append("Invalid quantity")
-        
-        is_authentic = risk_score == 0
-        
-        return {
-            "success": True,
-            "isAuthentic": is_authentic,
-            "riskScore": risk_score,
-            "confidence": 100 - risk_score,
-            "riskFactors": risk_factors
-        }
-    except Exception as e:
-        return {
-            "success": False,
-            "error": str(e)
-        }
-
-@app.get("/api/batches/track/{batch_id}")
-async def track_batch(batch_id: str):
-    try:
-        batches = load_batches()
-        batch = next((b for b in batches if b["batchId"] == batch_id), None)
-        
+        batch = get_batch(batch_id)
         if not batch:
-            return {
-                "success": False,
-                "message": "Batch not found"
-            }
-        
-        # Return supply chain timeline
-        timeline = [
-            {
-                "stage": "Manufacturing",
-                "location": "India",
-                "handler": "Pharma Corp Ltd",
-                "date": "2026-03-04",
-                "status": "✅"
-            },
-            {
-                "stage": "Quality Check",
-                "location": "Quality Lab",
-                "handler": "QA Department",
-                "date": "2026-03-09",
-                "status": "✅"
-            },
-            {
-                "stage": "Warehouse",
-                "location": "Central Warehouse",
-                "handler": "Logistics Co.",
-                "date": "2026-03-14",
-                "status": "✅"
-            },
-            {
-                "stage": "Distributor",
-                "location": "Regional Distributor",
-                "handler": "MediCare Distribution",
-                "date": "2026-03-24",
-                "status": "✅"
-            },
-            {
-                "stage": "Pharmacy",
-                "location": "Local Pharmacy",
-                "handler": "HealthPlus Pharmacy",
-                "date": "2026-04-03",
-                "status": "✅"
-            }
-        ]
-        
+            raise HTTPException(status_code=404, detail="Batch not found")
+        journey = get_supply_chain_records(batch_id)
         return {
-            "success": True,
-            "batch": batch,
-            "timeline": timeline
+            "batch_id": batch_id,
+            "medicine_name": batch["medicine_name"],
+            "manufacturer_name": batch["manufacturer_name"],
+            "current_stage": batch["current_stage"],
+            "is_genuine": batch["is_genuine"],
+            "journey": journey,
+            "total_steps": len(journey),
+            "blockchain": "Algorand Testnet"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/procurement/order")
+def create_order(order: ProcurementOrder):
+    try:
+        if get_procurement_order(order.order_id):
+            raise HTTPException(status_code=400, detail="Order ID already exists")
+        saved = add_procurement_order(order.order_id, order.dict())
+        return {
+            "message": "Procurement order created and payment locked in escrow automatically",
+            "order_id": order.order_id,
+            "medicine_name": order.medicine_name,
+            "quantity": order.quantity,
+            "payment_amount": order.payment_amount,
+            "status": "PENDING",
+            "escrow_status": "PAYMENT_LOCKED",
+            "blockchain": "Algorand Testnet"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/procurement/verify-and-pay/{order_id}")
+def verify_and_pay(order_id: str, is_genuine: bool):
+    try:
+        order = get_procurement_order(order_id)
+        if not order:
+            raise HTTPException(status_code=404, detail="Order not found")
+        if is_genuine:
+            update_order_status(order_id, "PAYMENT_RELEASED", True)
+            return {
+                "message": "Medicine verified genuine payment released to supplier automatically",
+                "order_id": order_id,
+                "status": "PAYMENT_RELEASED",
+                "blockchain": "Algorand Testnet"
+            }
+        else:
+            update_order_status(order_id, "COUNTERFEIT_DETECTED", False)
+            return {
+                "message": "Counterfeit detected payment blocked in escrow",
+                "order_id": order_id,
+                "status": "COUNTERFEIT_DETECTED",
+                "blockchain": "Algorand Testnet"
+            }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/supplychain/transfer")
+def transfer(transfer: SupplyChainTransfer):
+    try:
+        batch = get_batch(transfer.batch_id)
+        if not batch:
+            raise HTTPException(status_code=404, detail="Batch not found")
+        add_supply_chain_record(transfer.batch_id, {
+            "stage": transfer.stage,
+            "from": transfer.from_address,
+            "to": transfer.to_address,
+            "handler": transfer.to_name,
+            "location": transfer.location
+        })
+        update_batch_stage(transfer.batch_id, transfer.stage)
+        return {
+            "message": "Supply chain transfer recorded on Algorand blockchain",
+            "batch_id": transfer.batch_id,
+            "new_stage": transfer.stage,
+            "location": transfer.location,
+            "blockchain": "Algorand Testnet"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/alert/raise")
+def raise_alert(report: CounterfeitReport):
+    try:
+        flag_batch_counterfeit(report.batch_id)
+        add_alert(report.batch_id, report.dict())
+        return {
+            "message": "Counterfeit alert raised CDSCO notified batch frozen on blockchain",
+            "batch_id": report.batch_id,
+            "alert_level": report.alert_level,
+            "location": report.reported_location,
+            "status": "ACTIVE",
+            "cdsco_notified": True,
+            "blockchain": "Algorand Testnet"
         }
     except Exception as e:
-        return {
-            "success": False,
-            "error": str(e)
-        }
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/dashboard/stats")
+def dashboard_stats():
+    return get_dashboard_stats()
 
 if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)

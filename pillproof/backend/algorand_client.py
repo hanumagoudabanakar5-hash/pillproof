@@ -1,68 +1,32 @@
-from algosdk.v2client import algod
-from algosdk import account, mnemonic
+from algosdk.v2client import algod, indexer
 import os
+from dotenv import load_dotenv
 
-# Algorand Testnet Configuration
+load_dotenv()
+
 ALGOD_ADDRESS = "https://testnet-api.algonode.cloud"
 ALGOD_TOKEN = ""
+INDEXER_ADDRESS = "https://testnet-idx.algonode.cloud"
+INDEXER_TOKEN = ""
 
 def get_algod_client():
-    """Create and return an Algorand client instance"""
-    try:
-        client = algod.AlgodClient(
-            ALGOD_TOKEN,
-            ALGOD_ADDRESS
-        )
-        return client
-    except Exception as e:
-        print(f"❌ Error connecting to Algorand: {str(e)}")
-        return None
+    return algod.AlgodClient(ALGOD_TOKEN, ALGOD_ADDRESS)
 
-def get_account_info(address: str):
-    """Get account information from Algorand blockchain"""
+def get_indexer_client():
+    return indexer.IndexerClient(INDEXER_TOKEN, INDEXER_ADDRESS)
+
+def check_connection():
     try:
         client = get_algod_client()
-        if not client:
-            return {"error": "Failed to connect to blockchain"}
-        account_info = client.account_info(address)
-        return account_info
-    except Exception as e:
-        return {"error": str(e)}
-
-def check_balance(address: str):
-    """Check account balance on Algorand"""
-    try:
-        client = get_algod_client()
-        if not client:
-            return {"error": "Failed to connect to blockchain"}
-        account_info = client.account_info(address)
-        balance = account_info.get("amount")
-        return {"address": address, "balance": balance}
-    except Exception as e:
-        return {"error": str(e)}
-
-def get_transaction_info(txid: str):
-    """Get transaction information from Algorand"""
-    try:
-        client = get_algod_client()
-        if not client:
-            return {"error": "Failed to connect to blockchain"}
-        transaction = client.pending_transaction_info(txid)
-        return transaction
-    except Exception as e:
-        return {"error": str(e)}
-
-def verify_blockchain_connection():
-    """Verify connection to Algorand blockchain"""
-    try:
-        client = get_algod_client()
-        if not client:
-            return {"status": "DISCONNECTED", "message": "Failed to connect"}
         status = client.status()
-        return {
-            "status": "CONNECTED",
-            "message": "Successfully connected to Algorand Testnet",
-            "last_round": status.get("last-round")
-        }
+        return {"connected": True, "network": "Algorand Testnet", "round": status["last-round"]}
     except Exception as e:
-        return {"status": "ERROR", "message": str(e)}
+        return {"connected": False, "error": str(e)}
+
+def get_account_balance(address: str):
+    try:
+        client = get_algod_client()
+        info = client.account_info(address)
+        return {"address": address, "balance": info.get("amount", 0)}
+    except Exception as e:
+        return {"error": str(e)}
