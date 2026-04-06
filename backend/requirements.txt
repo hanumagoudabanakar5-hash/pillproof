@@ -1,0 +1,7 @@
+fastapi
+uvicorn
+py-algorand-sdk
+pydantic
+python-dotenv
+qrcode
+pillow
