@@ -1,7 +1,9 @@
-fastapi
-uvicorn
-py-algorand-sdk
-pydantic
-python-dotenv
-qrcode
-pillow
+fastapi==0.110.0
+uvicorn==0.27.1
+py-algorand-sdk==2.11.1
+supabase==2.4.0
+python-dotenv==1.0.1
+qrcode==7.4.2
+pillow==10.2.0
+requests==2.31.0
+pydantic==2.6.1
