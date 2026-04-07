@@ -3,7 +3,8 @@ import React, { useState, useEffect } from 'react';
 import { ShieldCheck, Package, Activity, AlertTriangle, CheckCircle, Search, Loader2, ArrowRight } from 'lucide-react';
 import axios from 'axios';
 
-const API_BASE_URL = "https://miniature-eureka-v67jrxv6vxjg2pjvg-8000.app.github.dev"; 
+// This looks for the Vercel variable first, then falls back to your live Railway URL
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://pillproof-production-ea92.up.railway.app"; 
 
 export default function PillProofDashboard() {
   const [activeTab, setActiveTab] = useState('manufacturer');
@@ -19,7 +20,7 @@ export default function PillProofDashboard() {
       const res = await axios.get(`${API_BASE_URL}/admin/batches`);
       setAllBatches(res.data);
     } catch (e) { 
-      console.error("Failed to load data from backend"); 
+      console.error("Failed to load data from backend. Check CORS or Backend URL."); 
     }
   };
 
@@ -46,7 +47,8 @@ export default function PillProofDashboard() {
       setQrImage(res.data.qr_code);
       alert("✅ Batch Registered Successfully on Algorand & IPFS!");
     } catch (error) {
-      alert("❌ Registration failed!");
+      console.error(error);
+      alert("❌ Registration failed! Check if backend is awake.");
     }
     setLoading(false);
   };
@@ -59,7 +61,7 @@ export default function PillProofDashboard() {
       const response = await axios.get(`${API_BASE_URL}/verify/${batchId}`);
       setVerifyResult(response.data);
     } catch (error) {
-      alert("❌ Connection Error!");
+      alert("❌ Verification failed! Batch might not exist.");
     }
     setLoading(false);
   };
@@ -71,6 +73,7 @@ export default function PillProofDashboard() {
         await axios.post(`${API_BASE_URL}/report-counterfeit?batch_id=${verifyResult.batch_id}`);
         alert("🚩 Batch Reported! It will now appear in the Alerts Portal.");
         setVerifyResult(null);
+        loadAllBatches();
       } catch (e) { alert("Error reporting counterfeit"); }
     }
   };
@@ -87,6 +90,7 @@ export default function PillProofDashboard() {
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 font-sans">
+      {/* Sidebar */}
       <div className="fixed left-0 top-0 h-full w-64 bg-slate-800 border-r border-slate-700 p-6 shadow-2xl z-50">
         <h1 className="text-2xl font-bold text-green-400 flex items-center gap-2 mb-10">
           <ShieldCheck size={32} /> PillProof
@@ -109,6 +113,7 @@ export default function PillProofDashboard() {
         </nav>
       </div>
 
+      {/* Main Content */}
       <div className="ml-64 p-10">
         <header className="mb-10 flex justify-between items-center">
           <div>
@@ -121,17 +126,18 @@ export default function PillProofDashboard() {
         </header>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {/* Manufacturer Tab */}
           {activeTab === 'manufacturer' && (
             <div className="bg-slate-800 p-8 rounded-2xl border border-slate-700 shadow-xl">
               <h3 className="text-xl font-semibold mb-6 flex items-center gap-2">
                 <Package className="text-blue-400" /> Register New Medicine Batch
               </h3>
               <form onSubmit={handleRegister} className="space-y-4">
-                <input name="batchId" className="w-full p-3 bg-slate-900 rounded border border-slate-600 outline-none focus:border-green-500" placeholder="Batch ID" required />
-                <input name="medName" className="w-full p-3 bg-slate-900 rounded border border-slate-600 outline-none focus:border-green-500" placeholder="Medicine Name" required />
-                <input name="qty" className="w-full p-3 bg-slate-900 rounded border border-slate-600 outline-none focus:border-green-500" type="number" placeholder="Quantity" required />
-                <input name="manufacturer" className="w-full p-3 bg-slate-900 rounded border border-slate-600 outline-none focus:border-green-500" placeholder="Manufacturer Name" required />
-                <button className="w-full py-4 bg-green-500 text-white font-bold rounded-lg hover:bg-green-600 transition-all flex justify-center items-center gap-2">
+                <input name="batchId" className="w-full p-3 bg-slate-900 rounded border border-slate-600 outline-none focus:border-green-500 text-white" placeholder="Batch ID (e.g. BATCH-001)" required />
+                <input name="medName" className="w-full p-3 bg-slate-900 rounded border border-slate-600 outline-none focus:border-green-500 text-white" placeholder="Medicine Name" required />
+                <input name="qty" className="w-full p-3 bg-slate-900 rounded border border-slate-600 outline-none focus:border-green-500 text-white" type="number" placeholder="Quantity" required />
+                <input name="manufacturer" className="w-full p-3 bg-slate-900 rounded border border-slate-600 outline-none focus:border-green-500 text-white" placeholder="Manufacturer Name" required />
+                <button disabled={loading} className="w-full py-4 bg-green-500 text-white font-bold rounded-lg hover:bg-green-600 disabled:opacity-50 transition-all flex justify-center items-center gap-2">
                   {loading ? <Loader2 className="animate-spin" /> : 'Mint ASA & Generate QR'}
                 </button>
               </form>
@@ -144,6 +150,7 @@ export default function PillProofDashboard() {
             </div>
           )}
 
+          {/* Pharmacist Tab */}
           {activeTab === 'pharmacist' && (
             <div className="bg-slate-800 p-8 rounded-2xl border border-slate-700 shadow-xl">
               <h3 className="text-xl font-semibold mb-6 flex items-center gap-2">
@@ -151,12 +158,12 @@ export default function PillProofDashboard() {
               </h3>
               <div className="flex gap-4 mb-8">
                 <input 
-                  className="flex-1 p-3 bg-slate-900 rounded border border-slate-600 outline-none focus:border-green-500" 
+                  className="flex-1 p-3 bg-slate-900 rounded border border-slate-600 outline-none focus:border-green-500 text-white" 
                   placeholder="Enter Batch ID..." 
                   value={batchId}
                   onChange={(e) => setBatchId(e.target.value)}
                 />
-                <button onClick={handleVerify} className="px-6 py-3 bg-blue-500 text-white font-bold rounded-lg hover:bg-blue-600 transition-all flex items-center gap-2">
+                <button onClick={handleVerify} disabled={loading} className="px-6 py-3 bg-blue-500 text-white font-bold rounded-lg hover:bg-blue-600 disabled:opacity-50 transition-all flex items-center gap-2">
                   {loading ? <Loader2 className="animate-spin" /> : 'Verify'}
                 </button>
               </div>
@@ -178,21 +185,22 @@ export default function PillProofDashboard() {
             </div>
           )}
 
+          {/* Regulator Tab */}
           {activeTab === 'regulator' && (
             <div className="bg-slate-800 p-8 rounded-2xl border border-slate-700 shadow-xl">
               <h3 className="text-xl font-semibold mb-6 flex items-center gap-2">
                 <Activity className="text-red-400" /> Live Supply Chain Map
               </h3>
-              <div className="space-y-3 max-h-[500px] overflow-y-auto">
+              <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2">
                 {allBatches.length === 0 ? <p className="text-slate-500">No batches registered yet.</p> : 
                   allBatches.map((batch, i) => (
                     <div key={i} className="flex justify-between p-4 bg-slate-900 rounded-lg border border-slate-700">
                       <div>
                         <p className="font-bold">{batch.medicine_name}</p>
                         <p className="text-xs text-slate-500">{batch.batch_id} | {batch.manufacturer}</p>
-                        <p className="text-xs text-blue-400 font-mono">{batch.current_stage}</p>
+                        <p className="text-xs text-blue-400 font-mono mt-1">{batch.current_stage}</p>
                       </div>
-                      <button onClick={() => transferBatch(batch.batch_id, batch.current_stage)} className="p-2 bg-slate-700 rounded hover:bg-slate-600 text-white">
+                      <button onClick={() => transferBatch(batch.batch_id, batch.current_stage)} title="Move to Next Stage" className="p-2 bg-slate-700 rounded hover:bg-slate-600 text-white">
                         <ArrowRight size={16}/>
                       </button>
                     </div>
@@ -202,6 +210,7 @@ export default function PillProofDashboard() {
             </div>
           )}
 
+          {/* Alerts Tab */}
           {activeTab === 'alerts' && (
             <div className="bg-slate-800 p-8 rounded-2xl border border-slate-700 shadow-xl">
               <h3 className="text-xl font-semibold mb-6 text-red-400 flex items-center gap-2">
@@ -215,7 +224,7 @@ export default function PillProofDashboard() {
                         CRITICAL ALERT: {batch.batch_id}
                       </div>
                       <p className="text-slate-300 text-sm">
-                        Medicine {batch.medicine_name} detected as counterfeit. The associated ARC-3 ASA has been frozen on-chain automatically.
+                        Medicine <strong>{batch.medicine_name}</strong> detected as counterfeit. The associated ARC-3 ASA has been frozen on-chain automatically.
                       </p>
                     </div>
                   ))
