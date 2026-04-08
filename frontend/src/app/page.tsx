@@ -1,9 +1,8 @@
 "use client";
 import React, { useState, useEffect } from 'react';
-import { ShieldCheck, Package, Activity, AlertTriangle, CheckCircle, Search, Loader2, ArrowRight } from 'lucide-react';
+import { ShieldCheck, Package, Activity, AlertTriangle, CheckCircle, Search, Loader2, ArrowRight, Menu, X } from 'lucide-react';
 import axios from 'axios';
 
-// This looks for the Vercel variable first, then falls back to your live Railway URL
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://pillproof-production-ea92.up.railway.app"; 
 
 export default function PillProofDashboard() {
@@ -13,8 +12,8 @@ export default function PillProofDashboard() {
   const [loading, setLoading] = useState(false);
   const [qrImage, setQrImage] = useState(null);
   const [allBatches, setAllBatches] = useState([]);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  // Function to fetch all batches for Regulator and Alerts tabs
   const loadAllBatches = async () => {
     try {
       const res = await axios.get(`${API_BASE_URL}/admin/batches`);
@@ -24,7 +23,6 @@ export default function PillProofDashboard() {
     }
   };
 
-  // Load data whenever we switch to Regulator or Alerts tabs
   useEffect(() => {
     if (activeTab === 'regulator' || activeTab === 'alerts') {
       loadAllBatches();
@@ -83,15 +81,31 @@ export default function PillProofDashboard() {
     const nextStage = stages[stages.indexOf(currentStage) + 1] || "Delivered";
     try {
       await axios.post(`${API_BASE_URL}/update-stage`, { batch_id: id, new_stage: nextStage });
-      loadAllBatches(); // Refresh the list
+      loadAllBatches();
       alert(`Batch moved to ${nextStage}`);
     } catch (e) { alert("Transfer failed"); }
   };
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 font-sans">
-      {/* Sidebar */}
-      <div className="fixed left-0 top-0 h-full w-64 bg-slate-800 border-r border-slate-700 p-6 shadow-2xl z-50">
+
+      {/* ── MOBILE TOP BAR ── */}
+      <div className="md:hidden fixed top-0 left-0 right-0 z-50 bg-slate-800 border-b border-slate-700 px-4 py-3 flex items-center justify-between">
+        <h1 className="text-lg font-bold text-green-400 flex items-center gap-2">
+          <ShieldCheck size={24} /> PillProof
+        </h1>
+        <button onClick={() => setSidebarOpen(!sidebarOpen)} className="text-slate-300">
+          {sidebarOpen ? <X size={26} /> : <Menu size={26} />}
+        </button>
+      </div>
+
+      {/* ── SIDEBAR ── */}
+      <div className={`
+        fixed left-0 top-0 h-full w-64 bg-slate-800 border-r border-slate-700 p-6 shadow-2xl z-40
+        transition-transform duration-300
+        ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+        md:translate-x-0
+      `}>
         <h1 className="text-2xl font-bold text-green-400 flex items-center gap-2 mb-10">
           <ShieldCheck size={32} /> PillProof
         </h1>
@@ -104,7 +118,7 @@ export default function PillProofDashboard() {
           ].map(tab => (
             <button 
               key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => { setActiveTab(tab.id); setSidebarOpen(false); }}
               className={`w-full flex items-center gap-3 p-3 rounded-lg transition-all ${activeTab === tab.id ? 'bg-green-500 text-white shadow-lg shadow-green-500/20' : 'text-slate-400 hover:bg-slate-700'}`}
             >
               {tab.icon} {tab.label}
@@ -113,14 +127,22 @@ export default function PillProofDashboard() {
         </nav>
       </div>
 
-      {/* Main Content */}
-      <div className="ml-64 p-10">
-        <header className="mb-10 flex justify-between items-center">
+      {/* ── OVERLAY (mobile only) ── */}
+      {sidebarOpen && (
+        <div 
+          className="md:hidden fixed inset-0 bg-black/50 z-30"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      {/* ── MAIN CONTENT ── */}
+      <div className="md:ml-64 p-4 md:p-10 pt-20 md:pt-10">
+        <header className="mb-10 flex flex-col md:flex-row justify-between md:items-center gap-4">
           <div>
-            <h2 className="text-4xl font-bold capitalize">{activeTab} Portal</h2>
+            <h2 className="text-2xl md:text-4xl font-bold capitalize">{activeTab} Portal</h2>
             <p className="text-slate-400">Autonomous Procurement Agent System</p>
           </div>
-          <div className="bg-slate-800 px-4 py-2 rounded-full border border-slate-700 text-sm font-mono text-green-400">
+          <div className="bg-slate-800 px-4 py-2 rounded-full border border-slate-700 text-sm font-mono text-green-400 self-start md:self-auto">
             ● Algorand Testnet Connected
           </div>
         </header>
